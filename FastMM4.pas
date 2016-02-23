@@ -1,3 +1,7 @@
+{$Include FastMM4Options.inc}
+
+{$define UseReleaseStack}
+
 (*
 
 Fast Memory Manager 4.991
@@ -160,8 +164,8 @@ Acknowledgements (for version 4):
  - Kristofer Skaug for reporting the bug that sometimes causes the leak report
    to be shown, even when all the leaks have been registered as expected leaks.
    Also for some useful enhancement suggestions.
- - Günther Schoch for the "RequireDebuggerPresenceForLeakReporting" option.
- - Jan Schlüter for the "ForceMMX" option.
+ - GÃ¼nther Schoch for the "RequireDebuggerPresenceForLeakReporting" option.
+ - Jan SchlÃ¼ter for the "ForceMMX" option.
  - Hallvard Vassbotn for various good enhancement suggestions.
  - Mark Edington for some good suggestions and bug reports.
  - Paul Ishenin for reporting the compilation error when the NoMessageBoxes
@@ -219,7 +223,7 @@ Acknowledgements (for version 4):
    not work in FullDebugMode.
  - Ionut Muntean for the Romanian translation.
  - Florent Ouchet for the French translation.
- - Marcus Mönnig for the ScanMemoryPoolForCorruptions suggestion and the
+ - Marcus MÃ¶nnig for the ScanMemoryPoolForCorruptions suggestion and the
    suggestion to have the option to scan the memory pool before every
    operation when in FullDebugMode.
  - Francois Piette for bringing under my attention that
@@ -438,10 +442,10 @@ Change log:
    leaks were registered as expected leaks. (Thanks to Kristofer Skaug.)
  Version 4.29 (30 September 2005):
  - Added the "RequireDebuggerPresenceForLeakReporting" option to only display
-   the leak report if the application is run inside the IDE. (Thanks to Günther
+   the leak report if the application is run inside the IDE. (Thanks to GÃ¼nther
    Schoch.)
  - Added the "ForceMMX" option, which when disabled will check the CPU for
-   MMX compatibility before using MMX. (Thanks to Jan Schlüter.)
+   MMX compatibility before using MMX. (Thanks to Jan SchlÃ¼ter.)
  - Added the module name to the title of error dialogs to more easily identify
    which application caused the error. (Thanks to Kristofer Skaug.)
  - Added an ASCII dump to the "FullDebugMode" memory dumps. (Thanks to Hallvard
@@ -670,14 +674,14 @@ Change log:
   - Added a ScanMemoryPoolForCorruptions procedure that checks the entire
     memory pool for corruptions and raises an exception if one is found. It can
     be called at any time, but is only available in FullDebugMode. (Thanks to
-    Marcus Mönnig.)
+    Marcus MÃ¶nnig.)
   - Added a global variable "FullDebugModeScanMemoryPoolBeforeEveryOperation".
     When this variable is set to true and FullDebugMode is enabled, then the
     entire memory pool is checked for consistency before every GetMem, FreeMem
     and ReallocMem operation. An "Out of Memory" error is raised if a
     corruption is found (and this variable is set to false to prevent recursive
     errors). This obviously incurs a massive performance hit, so enable it only
-    when hunting for elusive memory corruption bugs. (Thanks to Marcus Mönnig.)
+    when hunting for elusive memory corruption bugs. (Thanks to Marcus MÃ¶nnig.)
   - Fixed a bug in AllocMem that caused the FPU stack to be shifted by one
     position.
   - Changed the default for option "EnableMMX" to false, since using MMX may
@@ -840,7 +844,7 @@ Change log:
   - Included the average block size in the memory state log file. (Thanks to
     Hallvard Vassbotn)
   - Support added for Free Pascal's OS X and Linux targets, both i386 and
-    x86-64. (Thanks to Zoë Peterson - some fixes by Arnaud Bouchez)
+    x86-64. (Thanks to ZoÃ« Peterson - some fixes by Arnaud Bouchez)
   - Added the LogLockContention option which may be used to track down areas
     in the application that lead to frequent lock contentions in the memory
     manager. (Primoz Gabrijelcic)
@@ -6044,9 +6048,9 @@ var
   LDidSleep: Boolean;
   LStackTrace: TStackTrace;
 {$endif}
-  count: integer;
+  //count: integer;
 begin
-  count := 0;
+  //count := 0;
   {$ifdef fpc}
   if APointer = nil then
   begin
@@ -6077,7 +6081,7 @@ begin
       while (LockCmpxchg(0, 1, @LPSmallBlockType.BlockTypeLocked) <> 0) do
       begin
 {$ifdef UseReleaseStack}
-        if LPSmallBlockType.ReleaseStack.Push(APointer) then begin
+        if (not LPSmallBlockType.ReleaseStack.IsFull) and LPSmallBlockType.ReleaseStack.Push(APointer) then begin
           {Block will be released later.}
           Result := 0;
           Exit;
@@ -6105,6 +6109,7 @@ begin
       LPSmallBlockType.BlockCollector.Add(@LStackTrace[0], StackTraceDepth);
     end;
 {$endif}
+
     repeat
       {Get the old first free block}
       LOldFirstFreeBlock := LPSmallBlockPool.FirstFreeBlock;
@@ -6128,6 +6133,7 @@ begin
        likehood of success in catching objects still being used after being
        destroyed.}
 {$ifndef FullDebugMode}
+      (* don't free the pool for now, it gives AV with ReleaseStack!
       {Is the entire pool now free? -> Free it.}
       if LPSmallBlockPool.BlocksInUse = 0 then
       begin
@@ -6146,25 +6152,43 @@ begin
         FreeMediumBlock(LPSmallBlockPool);
         {Stop unwinding the release stack.}
         APointer := nil;
-      end
-      else
-      begin
-{$endif}
-{$ifdef UseReleaseStack}
-        if (count = (ReleaseStackSize div 2)) or (not LPSmallBlockType.ReleaseStack.Pop(APointer)) then
-        begin
-{$endif}
-          APointer := nil;
-          {Unlock this block type}
-          LPSmallBlockType.BlockTypeLocked := False;
-{$ifdef UseReleaseStack}
-        end;
-        Inc(count);
-{$endif}
-{$ifndef FullDebugMode}
+
+        Result := 0;
+        Exit;
       end;
+      *)
+//      else
+//      begin
+{$endif}
+//{$ifdef UseReleaseStack}
+//        if (count = (ReleaseStackSize div 2)) or
+//           LPSmallBlockType.ReleaseStack.IsEmpty or
+//           (not LPSmallBlockType.ReleaseStack.Pop(APointer)) then
+//        begin
+//{$endif}
+          APointer := nil;
+//          {Unlock this block type}
+//          LPSmallBlockType.BlockTypeLocked := False;    don't unlock it here already, keep the lock
+//{$endif}
+
+//{$ifdef UseReleaseStack}
+//        end;
+//        Inc(count);
+//{$endif}
+//{$ifndef FullDebugMode}
+//      end;
+//{$endif}
+
+{$ifdef UseReleaseStack}
+      //we still have the lock, so free everything from the pending queue
+      if not LPSmallBlockType.ReleaseStack.IsEmpty then
+        LPSmallBlockType.ReleaseStack.Pop(APointer);
 {$endif}
     until not assigned(APointer);
+
+    {Unlock this block type}
+    LPSmallBlockType.BlockTypeLocked := False;   //unlock it here, after processing the queue
+
     {No error}
     Result := 0;
   end
